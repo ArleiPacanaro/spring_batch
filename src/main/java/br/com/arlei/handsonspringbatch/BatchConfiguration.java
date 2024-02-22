@@ -2,7 +2,10 @@ package br.com.arlei.handsonspringbatch;
 
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.job.builder.FlowBuilder;
 import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.job.flow.Flow;
+import org.springframework.batch.core.job.flow.support.SimpleFlow;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
@@ -23,15 +26,29 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
 
+
 @Configuration
 public class BatchConfiguration {
 
     // Criando um JOb o bean faz a injeção do JobRepository as implemntações que são feitas para os beans começam coim simple
     // Um JOb pode ter n Step de todos tipos: chunck ou tasklest
-    // passar no parametrtro ou no @Bean
+    // passar no parametro ou no @Bean
     // .next estamos executando de forma ordenada..
 
+    // Execução assincrona paralela. o star aceita step e flow muito comum importarmos o Flow da package do java util errado
     @Bean
+    public Job processarPessoa(JobRepository jobRepository, Flow splitFlow){
+
+
+        // Passar nome do JOB e JOB Repository ai o Spring Batch ja cria
+        return new JobBuilder("importacaoPessoa",jobRepository)
+                .incrementer(new RunIdIncrementer())
+                .start(splitFlow).end().build();
+
+    }
+
+    // execução sequencial
+    /*@Bean
     public Job processarPessoa(JobRepository jobRepository,Step step, Step step2){
 
 
@@ -40,7 +57,7 @@ public class BatchConfiguration {
                 .incrementer(new RunIdIncrementer())
                 .start(step).next(step2).build();
 
-    }
+    }*/
 
     @Bean
     // encontramos estes beans ja prontos pelo proprio Spring Batch
@@ -82,7 +99,7 @@ public class BatchConfiguration {
     public Tasklet tasklet(){
 
         return  (contribution, chunkContext) -> {
-            System.out.println("Vamos esperar 30 segundos");
+            System.out.println("Vamos esperar 10 segundos");
             Thread.sleep(10000);
             return RepeatStatus.FINISHED;
             // se colocar para continuar a execução vai ocorrendo como um loop
@@ -90,10 +107,6 @@ public class BatchConfiguration {
         };
 
     }
-
-
-
-    
 
     // se fosse usar generico para varias parametros, não seria bean e chamaria o metodo para cada arquivo
     @Bean
@@ -132,6 +145,23 @@ public class BatchConfiguration {
         /// NÃO USAMOS JÁ IMPLEMenTaÇÕES PRONTAS, POIS TEM A HAVER COM NOSSA REGRA
 
         return new PessoaProcessor();
+    }
+
+    //Trabalhar com processos sendo executados em paralelo  org.springframework.batch.core.job.flow
+    @Bean
+    public Flow splitFlow(Step step, Step step2){
+
+        return new FlowBuilder<SimpleFlow>("simpleflow")
+                .split(new SimpleAsyncTaskExecutor())
+                .add(flow(step),flow(step2))
+        .build();
+
+    }
+
+    private SimpleFlow flow(Step step) {
+
+        return new FlowBuilder<SimpleFlow>("simpleflow").start(step).build();
+
     }
 
 }
